@@ -50,3 +50,22 @@ func (sub Async) Handle(ctx context.Context, evt Event) error {
 	wg.Wait()
 	return err
 }
+
+type Limited struct {
+	subscriber Subscriber
+	sem        chan struct{}
+}
+
+func NewLimited(sub Subscriber, max int) *Limited {
+	return &Limited{sub, make(chan struct{}, max)}
+}
+
+func (sub *Limited) Handle(ctx context.Context, evt Event) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case sub.sem <- struct{}{}:
+		defer func() { <-sub.sem }()
+		return sub.subscriber.Handle(ctx, evt)
+	}
+}
